@@ -294,59 +294,45 @@ class ASRDataset(Dataset):
                 - feat_lengths: Tensor of original feature lengths of shape (batch)
                 - transcript_lengths: Tensor of transcript lengths of shape (batch) or None
         """
-        # TODO: Implement collate_fn
-        feat, shifted_transcript, golden_transcript = zip(*batch)
-
-        feat = torch.stack(feat)
-
-        # TODO: Collect transposed features from the batch into a list of tensors (B x T x F)
-        # Note: Use list comprehension to collect the features from the batch
-        batch_feats  = torch.permute(feat, (0, 2, 1))
-
-        # TODO: Collect feature lengths from the batch into a tensor
-        # Note: Use list comprehension to collect the feature lengths from the batch   
-        feat_lengths = torch.tensor([len(f[1]) for f in batch_feats]) # B
-
-        # TODO: Pad features to create a batch of fixed-length padded features
-        # Note: Use torch.nn.utils.rnn.pad_sequence to pad the features (use pad_token as the padding value)
-        padded_feats = torch.nn.utils.rnn.pad_sequence(batch_feats, batch_first=True, padding_side='right', padding_value=self.pad_token) # B x T x F
-
-        # TODO: Handle transcripts for non-test partitions
+        # Unpack batch
+        feats, shifted_transcripts, golden_transcripts = zip(*batch)
+        
+        # Get feature lengths - each feat is shape (F, T)
+        feat_lengths = torch.tensor([feat.shape[1] for feat in feats])
+        
+        # Create a list of transposed features (T, F)
+        transposed_feats = [feat.transpose(0, 1) for feat in feats]  # Now each is (T, F)
+        
+        # Pad the transposed features - result will be (B, T, F)
+        padded_feats = pad_sequence(transposed_feats, batch_first=True, padding_value=0.0)
+        
+        # Process transcripts if not in test partition
         padded_shifted, padded_golden, transcript_lengths = None, None, None
         if self.partition != "test-clean":
-            # TODO: Collect shifted and golden transcripts from the batch into a list of tensors (B x T)  
-            # Note: Use list comprehension to collect the transcripts from the batch   
-            batch_shifted      = shifted_transcript # B x T
-            batch_golden       = golden_transcript # B x T
-
-            # TODO: Collect transcript lengths from the batch into a tensor
-            # Note: Use list comprehension to collect the transcript lengths from the batch   
-            transcript_lengths = torch.tensor([len(t) for t in batch_shifted]) # B
-
-            # TODO: Pad transcripts to create a batch of fixed-length padded transcripts
-            # Note: Use torch.nn.utils.rnn.pad_sequence to pad the transcripts (use pad_token as the padding value)
-            padded_shifted     = torch.nn.utils.rnn.pad_sequence(batch_shifted, batch_first=True, padding_side='right', padding_value=self.pad_token) # B x T
-            padded_golden      = torch.nn.utils.rnn.pad_sequence(batch_golden, batch_first=True, padding_side='right', padding_value=self.pad_token) # B x T
-
-        # TODO: Apply SpecAugment for training
+            # Get transcript lengths
+            transcript_lengths = torch.tensor([t.size(0) for t in shifted_transcripts])
+            
+            # Pad transcripts
+            padded_shifted = pad_sequence(shifted_transcripts, batch_first=True, padding_value=self.pad_token)
+            padded_golden = pad_sequence(golden_transcripts, batch_first=True, padding_value=self.pad_token)
+        
+        # Apply SpecAugment for training
         if self.config["specaug"] and self.isTrainPartition:
-            # TODO: Permute the features to (B x F x T)
-            padded_feats = torch.permute(padded_feats, (0, 2, 1)) # B x F x T
-
-            # TODO: Apply frequency masking
+            # Need to transpose for SpecAugment which expects (B, F, T)
+            padded_feats_BFT = padded_feats.transpose(1, 2)  # Now (B, F, T)
+            
+            # Apply frequency masking
             if self.config["specaug_conf"]["apply_freq_mask"]:
                 for _ in range(self.config["specaug_conf"]["num_freq_mask"]):
-                    padded_feats = self.freq_mask.forward(padded_feats)
-
-            # TODO: Apply time masking
+                    padded_feats_BFT = self.freq_mask(padded_feats_BFT)
+            
+            # Apply time masking
             if self.config["specaug_conf"]["apply_time_mask"]:
                 for _ in range(self.config["specaug_conf"]["num_time_mask"]):
-                    padded_feats = self.time_mask.forward(padded_feats)
-
-            # TODO: Permute the features back to (B x T x F)
-            padded_feats = torch.permute(padded_feats, (0, 1, 2)) # B x T x F
-
-        # TODO: Return the padded features, padded shifted, padded golden, feature lengths, and transcript lengths
-        # raise NotImplementedError # Remove once implemented
+                    padded_feats_BFT = self.time_mask(padded_feats_BFT)
+            
+            # Transpose back to (B, T, F)
+            padded_feats = padded_feats_BFT.transpose(1, 2)
+                    
         return padded_feats, padded_shifted, padded_golden, feat_lengths, transcript_lengths
 
