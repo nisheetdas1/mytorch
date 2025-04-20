@@ -98,10 +98,10 @@ class CrossAttentionDecoderLayer(nn.Module):
         # TODO: Implement __init__
 
         # TODO: Initialize the sublayers  
-        self.self_attn  = NotImplementedError # Masked self-attention layer
-        self.cross_attn = NotImplementedError # Cross-attention layer
-        self.ffn        = NotImplementedError # Feed-forward network
-        raise NotImplementedError # Remove once implemented
+        self.self_attn  = SelfAttentionLayer(d_model, num_heads, dropout) # Masked self-attention layer
+        self.cross_attn = CrossAttentionLayer(d_model, num_heads, dropout) # Cross-attention layer
+        self.ffn        = FeedForwardLayer(d_model, d_ff, dropout) # Feed-forward network
+        # raise NotImplementedError # Remove once implemented
 
     def forward(self, x: torch.Tensor, enc_output: torch.Tensor, dec_key_padding_mask: Optional[torch.Tensor] = None, enc_key_padding_mask: Optional[torch.Tensor] = None, attn_mask: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         '''
@@ -117,11 +117,14 @@ class CrossAttentionDecoderLayer(nn.Module):
             self_attn_weights (torch.Tensor): The attention weights. shape: (batch_size, seq_len, seq_len)   
             cross_attn_weights (torch.Tensor): The attention weights. shape: (batch_size, seq_len, seq_len)    
         '''
-        # TODO: Implement forward: Follow the figure in the writeup
-
-        x, self_attn_weights  = NotImplementedError, NotImplementedError
-        x, cross_attn_weights = NotImplementedError, NotImplementedError
-
-        # TODO: Return the output tensor and attention weights    
-        raise NotImplementedError # Remove once implemented
+        # Self-attention sublayer
+        attn_out, self_attn_weights = self.self_attn(x, dec_key_padding_mask, attn_mask)
+        
+        # Cross-attention sublayer
+        cross_out, cross_attn_weights = self.cross_attn(attn_out, enc_output, enc_key_padding_mask)
+        
+        # Feed-forward sublayer
+        output = self.ffn(cross_out)
+        
+        return output, self_attn_weights, cross_attn_weights
 ## -------------------------------------------------------------------------------------------------    
