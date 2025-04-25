@@ -63,13 +63,12 @@ class LMDataset(Dataset):
 
         # Set up data paths
         # TODO: Join root and partition to get the text directory
-        self.text_dir = os.path.join(os.getcwd(), 'hw4_data_subset', 'hw4p1_data', self.partition)
+        self.text_dir = os.path.join(config['root'], partition)
 
         # TODO: Get all text files in the text directory in sorted order
         self.text_files = sorted(os.listdir(self.text_dir))
 
         # TODO: Take subset
-        print(config)
         subset_size = int(config['subset'] * len(self.text_files))
         self.text_files = self.text_files[:subset_size]
 
@@ -88,9 +87,6 @@ class LMDataset(Dataset):
             # TODO: Load the transcript
             # Note: Use np.load to load the numpy array and convert to list and then join to string
             transcript = ' '.join(np.load(os.path.join(self.text_dir, file)).tolist())
-            print(transcript)
-            print(len(transcript))
-            print(type(transcript))
 
             # Track character count (before tokenization)
             # DO NOT MODIFY

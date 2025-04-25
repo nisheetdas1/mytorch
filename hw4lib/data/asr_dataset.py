@@ -98,7 +98,7 @@ class ASRDataset(Dataset):
         self.fbank_files = sorted(os.listdir(self.fbank_dir))
 
         # TODO: Take subset
-        subset_size = int(config['subset'])
+        subset_size = int(config['subset']) * len(self.fbank_files)
         self.fbank_files = self.fbank_files[:subset_size]
 
         # TODO: Get the number of samples in the dataset
