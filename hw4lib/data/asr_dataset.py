@@ -5,7 +5,7 @@ import torchaudio
 from sympy import partition
 from tqdm import tqdm
 import torch
-from torch.utils.data import Dataset 
+from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 import torchaudio.transforms as tat
 from .tokenizer import H4Tokenizer
@@ -52,14 +52,15 @@ Key Requirements:
 - Must support different normalization strategies
 '''
 
+
 class ASRDataset(Dataset):
     def __init__(
             self,
-            partition:Literal['train-clean-100', 'dev-clean', 'test-clean'],
-            config:dict,
-            tokenizer:H4Tokenizer,
-            isTrainPartition:bool,
-            global_stats:Optional[Tuple[torch.Tensor, torch.Tensor]]=None
+            partition: Literal['train-clean-100', 'dev-clean', 'test-clean'],
+            config: dict,
+            tokenizer: H4Tokenizer,
+            isTrainPartition: bool,
+            global_stats: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
     ):
         """
         Initialize the ASRDataset for ASR training/validation/testing.
@@ -78,7 +79,7 @@ class ASRDataset(Dataset):
         # raise NotImplementedError # Remove once implemented
 
         # Store basic configuration
-        self.config    = config
+        self.config = config
         self.partition = partition
         self.isTrainPartition = isTrainPartition
         self.tokenizer = tokenizer
@@ -89,51 +90,51 @@ class ASRDataset(Dataset):
         self.sos_token = tokenizer.sos_id
         self.pad_token = tokenizer.pad_id
 
-        # Set up data paths 
+        # Set up data paths
         # TODO: Use root and partition to get the feature directory
-        self.fbank_dir   = os.path.join(os.getcwd(),'hw4_data_subset', 'hw4p2_data', partition, 'fbank')
-        
-        # TODO: Get all feature files in the feature directory in sorted order  
+        self.fbank_dir = os.path.join(config['root'], partition, 'fbank')
+
+        # TODO: Get all feature files in the feature directory in sorted order
         self.fbank_files = sorted(os.listdir(self.fbank_dir))
-        
+
         # TODO: Take subset
-        subset_size      = int(config['subset'])
+        subset_size = int(config['subset'])
         self.fbank_files = self.fbank_files[:subset_size]
-        
-        # TODO: Get the number of samples in the dataset  
-        self.length      = len(self.fbank_files)
+
+        # TODO: Get the number of samples in the dataset
+        self.length = len(self.fbank_files)
 
         # Case on partition.
         # Why will test-clean need to be handled differently?
         if self.partition != "test-clean":
             # TODO: Use root and partition to get the text directory
-            self.text_dir   = os.path.join(os.getcwd(), 'hw4_data_subset', 'hw4p2_data', partition, 'text')
+            self.text_dir = os.path.join(config['root'], partition, 'text')
 
-            # TODO: Get all text files in the text directory in sorted order  
+            # TODO: Get all text files in the text directory in sorted order
             self.text_files = sorted(os.listdir(self.text_dir))
-            
+
             # TODO: Take subset
             self.text_files = self.text_files[:subset_size]
-            
+
             # Verify data alignment
             if len(self.fbank_files) != len(self.text_files):
                 raise ValueError("Number of feature and transcript files must match")
 
         # Initialize lists to store features and transcripts
         self.feats, self.transcripts_shifted, self.transcripts_golden = [], [], []
-        
+
         # Initialize counters for character and token counts
         # DO NOT MODIFY
-        self.total_chars  = 0
+        self.total_chars = 0
         self.total_tokens = 0
-        
+
         # Initialize max length variables
         # DO NOT MODIFY
         self.feat_max_len = 0
         self.text_max_len = 0
 
         self.num_feat = config['num_feats']
-        
+
         # Initialize Welford's algorithm accumulators if needed for global_mvn
         # DO NOT MODIFY
         if self.config['norm'] == 'global_mvn' and global_stats is None:
@@ -161,20 +162,20 @@ class ASRDataset(Dataset):
             # Update global statistics if needed (DO NOT MODIFY)
             if self.config['norm'] == 'global_mvn' and global_stats is None:
                 feat_tensor = torch.FloatTensor(feat)  # (num_feats, time)
-                batch_count = feat_tensor.shape[1]     # number of time steps
+                batch_count = feat_tensor.shape[1]  # number of time steps
                 count += batch_count
-                
+
                 # Update mean and M2 for all time steps at once
                 delta = feat_tensor - mean.unsqueeze(1)  # (num_feats, time)
-                mean += delta.mean(dim=1)                # (num_feats,)
-                delta2 = feat_tensor - mean.unsqueeze(1) # (num_feats, time)
-                M2 += (delta * delta2).sum(dim=1)        # (num_feats,)
+                mean += delta.mean(dim=1)  # (num_feats,)
+                delta2 = feat_tensor - mean.unsqueeze(1)  # (num_feats, time)
+                M2 += (delta * delta2).sum(dim=1)  # (num_feats,)
 
-            # NOTE: The following steps are almost the same as the steps in the LMDataset   
-            
+            # NOTE: The following steps are almost the same as the steps in the LMDataset
+
             if self.partition != "test-clean":
                 # TODO: Load the transcript
-                # Note: Use np.load to load the numpy array and convert to list and then join to string 
+                # Note: Use np.load to load the numpy array and convert to list and then join to string
                 transcript = ''.join(np.load(os.path.join(self.text_dir, self.text_files[i])).tolist())
 
                 # TODO: Track character count (before tokenization)
@@ -189,19 +190,19 @@ class ASRDataset(Dataset):
 
                 # Track max length (add 1 for the sos/eos tokens)
                 # DO NOT MODIFY
-                self.text_max_len = max(self.text_max_len, len(tokenized)+1)
+                self.text_max_len = max(self.text_max_len, len(tokenized) + 1)
 
                 shifted = [self.sos_token] + tokenized
                 golden = tokenized + [self.eos_token]
-                
-                # TODO: Create shifted and golden versions by adding sos and eos tokens   
+
+                # TODO: Create shifted and golden versions by adding sos and eos tokens
                 self.transcripts_shifted.append(shifted)
                 self.transcripts_golden.append(golden)
 
         # Calculate average characters per token
-        # DO NOT MODIFY 
+        # DO NOT MODIFY
         self.avg_chars_per_token = self.total_chars / self.total_tokens if self.total_tokens > 0 else 0
-        
+
         if self.partition != "test-clean":
             # Verify data alignment
             if not (len(self.feats) == len(self.transcripts_shifted) == len(self.transcripts_golden)):
@@ -213,7 +214,7 @@ class ASRDataset(Dataset):
                 self.global_mean, self.global_std = global_stats
             else:
                 # Compute variance and standard deviation
-                variance = M2/(count - 1)
+                variance = M2 / (count - 1)
                 self.global_std = torch.sqrt(variance + 1e-8).float()
                 self.global_mean = mean.float()
 
@@ -268,13 +269,13 @@ class ASRDataset(Dataset):
             feat = (feat - feat.mean(dim=1, keepdim=True)) / (feat.std(dim=1, keepdim=True) + 1e-8)
         elif self.config['norm'] == 'none':
             pass
-        
+
         # TODO: Get transcripts for non-test partitions
         shifted_transcript, golden_transcript = None, None
         if self.partition != "test-clean":
             # TODO: Get transcripts for non-test partitions
             shifted_transcript = torch.LongTensor(self.transcripts_shifted[idx])
-            golden_transcript  = torch.LongTensor(self.transcripts_golden[idx])
+            golden_transcript = torch.LongTensor(self.transcripts_golden[idx])
 
         # raise NotImplementedError # Remove once implemented
         return feat, shifted_transcript, golden_transcript
@@ -290,49 +291,49 @@ class ASRDataset(Dataset):
             tuple: (padded_features, padded_shifted, padded_golden, feat_lengths, transcript_lengths) where:
                 - padded_features: Tensor of shape (batch, max_time, num_feats)
                 - padded_shifted: Tensor of shape (batch, max_len) or None
-                - padded_golden: Tensor of shape (batch, max_len) or None  
+                - padded_golden: Tensor of shape (batch, max_len) or None
                 - feat_lengths: Tensor of original feature lengths of shape (batch)
                 - transcript_lengths: Tensor of transcript lengths of shape (batch) or None
         """
         # Unpack batch
         feats, shifted_transcripts, golden_transcripts = zip(*batch)
-        
+
         # Get feature lengths - each feat is shape (F, T)
         feat_lengths = torch.tensor([feat.shape[1] for feat in feats])
-        
+
         # Create a list of transposed features (T, F)
         transposed_feats = [feat.transpose(0, 1) for feat in feats]  # Now each is (T, F)
-        
+
         # Pad the transposed features - result will be (B, T, F)
         padded_feats = pad_sequence(transposed_feats, batch_first=True, padding_value=0.0)
-        
+
         # Process transcripts if not in test partition
         padded_shifted, padded_golden, transcript_lengths = None, None, None
         if self.partition != "test-clean":
             # Get transcript lengths
             transcript_lengths = torch.tensor([t.size(0) for t in shifted_transcripts])
-            
+
             # Pad transcripts
             padded_shifted = pad_sequence(shifted_transcripts, batch_first=True, padding_value=self.pad_token)
             padded_golden = pad_sequence(golden_transcripts, batch_first=True, padding_value=self.pad_token)
-        
+
         # Apply SpecAugment for training
         if self.config["specaug"] and self.isTrainPartition:
             # Need to transpose for SpecAugment which expects (B, F, T)
             padded_feats_BFT = padded_feats.transpose(1, 2)  # Now (B, F, T)
-            
+
             # Apply frequency masking
             if self.config["specaug_conf"]["apply_freq_mask"]:
                 for _ in range(self.config["specaug_conf"]["num_freq_mask"]):
                     padded_feats_BFT = self.freq_mask(padded_feats_BFT)
-            
+
             # Apply time masking
             if self.config["specaug_conf"]["apply_time_mask"]:
                 for _ in range(self.config["specaug_conf"]["num_time_mask"]):
                     padded_feats_BFT = self.time_mask(padded_feats_BFT)
-            
+
             # Transpose back to (B, T, F)
             padded_feats = padded_feats_BFT.transpose(1, 2)
-                    
+
         return padded_feats, padded_shifted, padded_golden, feat_lengths, transcript_lengths
 
